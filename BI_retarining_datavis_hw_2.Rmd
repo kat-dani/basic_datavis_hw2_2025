@@ -21,6 +21,7 @@ suppressPackageStartupMessages(library(ggExtra))
 suppressPackageStartupMessages(library(ggmosaic))
 suppressPackageStartupMessages(library(scales))
 suppressPackageStartupMessages(library(tidyverse))
+# library(ggimage) #не подходит для моей версии R (4.5.0)
 
 options(scipen = 999)
 ```
@@ -184,7 +185,118 @@ labels = hogwarts_wandCore_names
 
 ## 4
 
+Недостатки графика из дз:
+1) На графике отображены рандомные недели, и не упорядочены.
+2) Линия "треда" не нужна, на такой столбчатой диаграмма итак видна тенденция.
+3) Легенда не интуитивно понятна, что год разбит на 6 частей по неделям. Также на легенде порядок недель неправильный.
+4) Присутсвует вторая часть легенды только с одним названием цвета, это лишнее.
+5) Подписи графика мелкие, цвета не контрастные к фону, надписи не читаемые. Заголовок мелкий, не центрирован, меньше по размеру чем подзаголовок.
+6) график сильно вытянут по вертикали, а это манипулятивный прием, чтобы показать больший перепад по y.
+7) Слишком частые деления на оси Y. Оси не подписаны "человеческим" языком.
+8) Сетка также слишком частая и темная
+9) Красная поясняющая стрелка слишком массивная: занимает большую часть графика и отвлекает на себя внимание от данных. Он вообще не нужна, т.к. в заметке, от которой она начинается, идет речь о начале обучения, а стрелка указывает на окончание года.
+10) Фон такой пестрой картинкой - лишнее, неуместно для такого графика, мешает считывать график.
+11) В связи с этим всем дана неверная интерпретация данных, из-за чего было принято радикальное решение об увольнении и штрафах.
+
+Хорошее в это графике:
+1) Добавлены подсказки в виде "заметок" и линий (в принципе само добавление их на график, а не их вид).
+2) Добавлены доверительные интервалы для баллов на неделе (правда зачем, но вдруг кому-то очень нужно)
+3) В интерпретации графика попытались найти причину найденной тенденции и предложить решение (опустим детали, какое)
+
+
 ```{r, fig.width=14, fig.height=9}
+
+result_per_week_df <- hogwarts |> 
+  pivot_longer(c(starts_with("week")), names_to = "week_number", values_to = "score") |>  # по неделям
+  mutate(week_number = week_number |> str_split_i("_", 2) |> as.numeric()) |> 
+  group_by(week_number) |> 
+  summarise(result_per_week = sum(score),
+            sd_per_week     = sd(score))
+
+ggplot(result_per_week_df)+
+  geom_col(aes(x = week_number, y = result_per_week, fill = result_per_week), colour = "black")+
+  geom_errorbar( aes(x=week_number, ymin=result_per_week-sd_per_week, ymax=result_per_week+sd_per_week), width=0.4, colour="orange", alpha=0.9, size=1.3)+
+  labs(
+    title = "Сумма баллов за год по неделям",
+    subtitle = "Хогвартс, 2024-2025 учебный год",
+    x = "Неделя",
+    y = "Баллы",
+    fill = "Баллы" # Заголовок легенды
+  )
+```
+Как видно по графику, баллы по неделям распределены довольно равномерно: есть спады и подъемы на всем протяжении графика. По данному графику мы не можем сделать вывод о наличии тенденции к "выгоранию" преподавателей или лени учащихся под конец года.
+
+## 5
+
+```{r, fig.width=5, fig.height=15}
+
+# hint2 <- read_csv("data/podskazka2.csv")
+# 
+# ggplot(hint2, aes(x = `X`, y = `Y`))+
+#   geom_point()
+
+ms <- c(14,11,8,18,27,36)
+
+result_per_week_df_1 <- hogwarts |> 
+  pivot_longer(c(starts_with("week")), names_to = "week_number", values_to = "score") |>  # по неделям
+  mutate(week_number = week_number |> str_split_i("_", 2) |> as.numeric()) |> 
+  group_by(week_number) |> 
+  summarise(result_per_week = sum(score),
+            sd_per_week     = sd(score)) |>
+  filter(week_number %in% c(14,11,8,18,27,36)) |> 
+  mutate(week_number = as.factor(week_number))
+
+ms <- c(14,11,8,18,27,36)
+
+ggplot(result_per_week_df_1)+
+  geom_col(aes(x = fct_reorder(week_number, ms), y = result_per_week, fill = week_number, alpha = 0.7), colour = "black")+
+  geom_errorbar(aes(x=week_number, ymin=result_per_week-sd_per_week, ymax=result_per_week+sd_per_week), width=0.4, colour="black", size=1.5)+
+    geom_line(aes(x = fct_reorder(week_number, ms), y=result_per_week, group = 1),
+    colour = "black",
+    size = 1
+  ) +
+  labs(
+    title = "Эмоциональное выгорание преподавателей или лень учеников?",
+    subtitle = "Dramatical decreasing of mean score for every subsequent week in Hogwarts"
+  )+
+  scale_y_continuous( # подписи для оси Y для количественной переменной
+    name = "Балл",
+    breaks = seq(0, 1000, 10) # отсечки на оси
+  )+
+    scale_fill_manual( # подписи для оси легенды, ручная настройка
+    labels = c(
+      "8" = "3/6",
+      "11" = "2/6",
+      "14" = "1/6",
+      "18" = "4/6",
+      "27" = "5/6",
+      "36" = "6/6"
+    ),
+    values = c(
+      "8" = "#CA3519",
+      "11" = "#5EA529",
+      "14" = "#7BF1A8",
+      "18" = "#2984D1",
+      "27" = "#7C86FF",
+      "36" = "#79716B"
+    )
+  )+
+  theme(
+    axis.text = element_text(size = 5),
+    axis.title = element_text(size = 5),
+    plot.title = element_text(size = 8),
+    plot.subtitle = element_text(size = 9, colour= "red"),
+    legend.title = element_text(size = 5),
+    legend.text = element_text(size = 5),
+    panel.background = element_rect(fill = "orange"), # вместо изображения
+    panel.grid.major.y = element_line(colour = "black")
+  )
+
+```
+## 6
+
+```{r}
+
 
 
 
